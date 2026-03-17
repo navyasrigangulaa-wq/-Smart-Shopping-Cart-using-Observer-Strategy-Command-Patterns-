@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Shopping Demo — Observer / Strategy / Command</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body { font-family: Arial, sans-serif; margin: 18px; background:#f6f8fa; color:#111; }
+  .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 420px; gap: 18px; }
+  .card { background:white; border-radius:10px; padding:14px; box-shadow:0 6px 18px rgba(20,20,40,0.06); }
+  h2 { margin:6px 0 12px; font-size:18px; }
+  .product { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed #eee; }
+  .small { font-size:13px; color:#666; }
+  button { padding:8px 12px; border-radius:8px; border:0; cursor:pointer; }
+  .btn-primary { background:#007bff; color:white; }
+  .btn-ghost { background:transparent; border:1px solid #ddd; }
+  .btn-danger { background:#e65757; color:white; }
+  .flex { display:flex; gap:8px; align-items:center; }
+  .products-list { max-height:260px; overflow:auto; margin-bottom:8px; }
+  .notify-area { max-height:160px; overflow:auto; padding:8px; background:#f8f9fb; border-radius:6px; border:1px solid #eef2f6; }
+  .cart-items { max-height:220px; overflow:auto; margin-bottom:8px; }
+  .line { display:flex; justify-content:space-between; padding:6px 0; }
+  .muted { color:#666; font-size:13px; }
+  label { font-size:13px; color:#333; }
+  input[type="text"], input[type="number"], select { padding:8px; border-radius:6px; border:1px solid #ddd; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .badge { background:#f1f5f9; padding:4px 8px; border-radius:999px; font-size:12px; }
+  footer { margin-top:18px; font-size:13px; color:#666; }
+</style>
+</head>
+<body>
+  <h1 style="font-size:22px">Mini Shopping Demo — Observer, Strategy, Command</h1>
+  <p class="muted">Try subscribing to price alerts, add items to cart, apply coupon, undo/redo actions, and checkout with different payment strategies.</p>
+
+  <div class="container">
+    <!-- Left column: Products & Cart -->
+    <div>
+      <div class="card">
+        <h2>Products <span class="small">(click "Lower price" to trigger price drop)</span></h2>
+        <div class="products-list" id="productsList"></div>
+
+        <h2 style="margin-top:10px">Notifications</h2>
+        <div class="notify-area" id="notifications"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <h2>Shopping Cart</h2>
+        <div class="cart-items" id="cartItems"></div>
+
+        <div class="line">
+          <div class="muted">Coupon:</div>
+          <div id="couponBadge" class="badge">None</div>
+        </div>
+        <div class="line">
+          <div class="muted">Subtotal:</div>
+          <div id="subtotal">₹0</div>
+        </div>
+        <div class="line">
+          <div class="muted">Total:</div>
+          <div id="total">₹0</div>
+        </div>
+
+        <div style="margin-top:8px" class="actions">
+          <button class="btn-ghost" id="undoBtn">Undo</button>
+          <button class="btn-ghost" id="redoBtn">Redo</button>
+          <button class="btn-danger" id="clearBtn">Clear Cart</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: Controls / Checkout -->
+    <div>
+      <div class="card">
+        <h2>Customer (Observer)</h2>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <input id="customerName" placeholder="Your name (e.g., Nithin)" />
+          <button id="createCustomerBtn" class="btn-primary">Set Customer</button>
+        </div>
+        <div class="small muted">Once set, use Subscribe / Unsubscribe buttons on products to receive price drop alerts below.</div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <h2>Cart Actions (Command)</h2>
+        <div style="margin-bottom:8px">
+          <label>Pick product to Add:</label>
+          <select id="productSelect" style="width:100%;margin-top:6px"></select>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <input id="qtyInput" type="number" min="1" value="1" style="width:80px" />
+          <button id="addBtn" class="btn-primary">Add to Cart</button>
+          <button id="removeBtn" class="btn-ghost">Remove 1</button>
+        </div>
+
+        <div style="margin-top:8px">
+          <label>Apply coupon (flat ₹):</label>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <input id="couponInput" type="number" min="0" placeholder="e.g., 200" />
+            <button id="applyCouponBtn" class="btn-primary">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <h2>Checkout (Strategy)</h2>
+        <div style="margin-bottom:8px">
+          <label>Select Payment Method:</label>
+          <select id="paymentMethod" style="width:100%;margin-top:6px">
+            <option value="card">Card</option>
+            <option value="upi">UPI</option>
+            <option value="wallet">Wallet</option>
+          </select>
+        </div>
+
+        <div id="paymentFields" style="margin-bottom:8px">
+          <!-- dynamic fields -->
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button id="checkoutBtn" class="btn-primary">Checkout</button>
+          <button id="simulatePriceDrop" class="btn-ghost">Simulate Price Drop</button>
+        </div>
+
+        <div style="margin-top:8px">
+          <div class="muted small">Checkout prints simulated success/failure messages to the Notifications panel.</div>
+        </div>
+      </div>
+
+      <footer>
+        <div>Patterns used: <strong>Observer</strong> (price alerts), <strong>Strategy</strong> (payment), <strong>Command</strong> (cart undo/redo)</div>
+      </footer>
+    </div>
+  </div>
+
+<script>
+/*
+  Simple in-browser implementation:
+  - Product (subject) with observers (customers)
+  - Customer implements an 'update' callback for price drops
+  - Command pattern for cart actions with undo/redo stacks
+  - Payment Strategy objects with a uniform pay(amount, details) interface
+*/
+
+/* ------------------------------
+   Domain: Product & Observer
+   ------------------------------ */
+class Product {
+  constructor(id, name, price) {
+    this.id = id; this.name = name; this.price = price;
+    this.observers = new Set(); // observers are Customer objects
+  }
+
+  addObserver(obs) { this.observers.add(obs); }
+  removeObserver(obs) { this.observers.delete(obs); }
+
+  setPrice(newPrice) {
+    const old = this.price;
+    this.price = newPrice;
+    if (newPrice < old) {
+      this.notifyPriceDrop(old, newPrice);
+    }
+  }
+
+  notifyPriceDrop(oldPrice, newPrice) {
+    for (const o of Array.from(this.observers)) {
+      try { o.onPriceDrop(this, oldPrice, newPrice); } catch(e) { console.error(e); }
+    }
+  }
+}
+
+/* ------------------------------
+   Customer (Observer)
+   ------------------------------ */
+class Customer {
+  constructor(id, name) {
+    this.id = id; this.name = name;
+  }
+  onPriceDrop(product, oldPrice, newPrice) {
+    UI.addNotification(${this.name} — Price dropped for "${product.name}" from ₹${oldPrice} → ₹${newPrice});
+  }
+}
+
+/* ------------------------------
+   Cart & Command Pattern
+   ------------------------------ */
+class Cart {
+  constructor() {
+    this.items = new Map(); // productId => { product, qty }
+    this.coupon = 0; // flat discount
+  }
+
+  addItem(product, qty=1) {
+    const e = this.items.get(product.id);
+    if (!e) this.items.set(product.id, { product, qty });
+    else e.qty += qty;
+  }
+
+  removeItem(product, qty=1) {
+    const e = this.items.get(product.id);
+    if (!e) return;
+    e.qty -= qty;
+    if (e.qty <= 0) this.items.delete(product.id);
+  }
+
+  applyCoupon(amount) {
+    this.coupon = amount;
+  }
+
+  clear() {
+    this.items.clear(); this.coupon = 0;
+  }
+
+  subtotal() {
+    let s = 0;
+    for (const {product, qty} of this.items.values()) s += product.price * qty;
+    return s;
+  }
+
+  total() {
+    const t = this.subtotal() - this.coupon;
+    return t < 0 ? 0 : t;
+  }
+}
+
+/* Command interface */
+class Command {
+  execute() { throw "execute not implemented"; }
+  undo() { throw "undo not implemented"; }
+}
+
+/* Concrete Commands */
+class AddItemCommand extends Command {
+  constructor(cart, product, qty) { super(); this.cart = cart; this.product = product; this.qty = qty; }
+  execute() { this.cart.addItem(this.product, this.qty); }
+  undo() { this.cart.removeItem(this.product, this.qty); }
+}
+
+class RemoveItemCommand extends Command {
+  constructor(cart, product, qty) { super(); this.cart = cart; this.product = product; this.qty = qty; }
+  execute() { this.cart.removeItem(this.product, this.qty); }
+  undo() { this.cart.addItem(this.product, this.qty); }
+}
+
+class ApplyCouponCommand extends Command {
+  constructor(cart, amount) { super(); this.cart = cart; this.amount = amount; this.prev = null; }
+  execute() { this.prev = this.cart.coupon; this.cart.applyCoupon(this.amount); }
+  undo() { this.cart.applyCoupon(this.prev); }
+}
+
+class ClearCartCommand extends Command {
+  constructor(cart) { super(); this.cart = cart; this.snapshot = null; }
+  execute() {
+    // save snapshot to restore on undo
+    this.snapshot = {
+      items: new Map(),
+      coupon: this.cart.coupon
+    };
+    for (const [k, v] of this.cart.items) this.snapshot.items.set(k, { product: v.product, qty: v.qty });
+    this.cart.clear();
+  }
+  undo() {
+    this.cart.coupon = this.snapshot.coupon;
+    this.cart.items = new Map();
+    for (const [k, v] of this.snapshot.items) this.cart.items.set(k, { product: v.product, qty: v.qty });
+  }
+}
+
+/* Invoker: handles execute + undo/redo stacks */
+class CartManager {
+  constructor() {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+  execute(cmd) {
+    cmd.execute();
+    this.undoStack.push(cmd);
+    this.redoStack = [];
+    UI.renderCart();
+  }
+  undo() {
+    if (!this.undoStack.length) { UI.addNotification("Nothing to undo"); return; }
+    const cmd = this.undoStack.pop();
+    cmd.undo();
+    this.redoStack.push(cmd);
+    UI.renderCart();
+  }
+  redo() {
+    if (!this.redoStack.length) { UI.addNotification("Nothing to redo"); return; }
+    const cmd = this.redoStack.pop();
+    cmd.execute();
+    this.undoStack.push(cmd);
+    UI.renderCart();
+  }
+}
+
+/* ------------------------------
+   Payment Strategy
+   ------------------------------ */
+class PaymentStrategy {
+  pay(amount, details) { throw "pay not implemented"; }
+}
+
+class CardPayment extends PaymentStrategy {
+  pay(amount, details) {
+    // very simple simulation: accept if cardNumber present
+    if (!details.cardNumber) { UI.addNotification("Card payment failed: missing card number"); return false; }
+    UI.addNotification(Card charged ₹${amount} (card ${mask(details.cardNumber)}) — SUCCESS);
+    return true;
+  }
+}
+
+class UpiPayment extends PaymentStrategy {
+  pay(amount, details) {
+    if (!details.vpa) { UI.addNotification("UPI payment failed: missing VPA"); return false; }
+    UI.addNotification(UPI charged ₹${amount} from ${details.vpa} — SUCCESS);
+    return true;
+  }
+}
+
+class WalletPayment extends PaymentStrategy {
+  constructor() { super(); this.balance = 1000; } // demo wallet
+  pay(amount, details) {
+    if (this.balance >= amount) {
+      this.balance -= amount;
+      UI.addNotification(Wallet charged ₹${amount}. Wallet balance: ₹${this.balance.toFixed(2)} — SUCCESS);
+      return true;
+    } else {
+      UI.addNotification(Wallet payment failed: insufficient balance (₹${this.balance.toFixed(2)}));
+      return false;
+    }
+  }
+}
+
+/* Helpers */
+function mask(card) {
+  return card.slice(-4).padStart(card.length, 'x');
+}
+
+/* ------------------------------
+   UI & wiring
+   ------------------------------ */
+
+const UI = (function(){
+  // sample products
+  const products = [
+    new Product('p1', 'Wireless Mouse', 599),
+    new Product('p2', 'Mechanical Keyboard', 2499),
+    new Product('p3', 'Noise Cancelling Headphones', 4999),
+    new Product('p4', 'USB-C Charger', 799),
+  ];
+
+  const productMap = new Map(products.map(p => [p.id, p]));
+
+  // single cart + manager + wallet instance (strategy)
+  const cart = new Cart();
+  const manager = new CartManager();
+  const wallet = new WalletPayment();
+
+  let currentCustomer = null; // Customer object
+
+  // DOM refs
+  const productsListEl = document.getElementById('productsList');
+  const notificationsEl = document.getElementById('notifications');
+  const cartItemsEl = document.getElementById('cartItems');
+  const productSelect = document.getElementById('productSelect');
+  const qtyInput = document.getElementById('qtyInput');
+  const subtotalEl = document.getElementById('subtotal');
+  const totalEl = document.getElementById('total');
+  const couponBadge = document.getElementById('couponBadge');
+
+  // init product select & product list UI
+  function init() {
+    for (const p of products) {
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = ${p.name} (₹${p.price});
+      productSelect.appendChild(opt);
+    }
+    renderProducts();
+    renderCart();
+    bindControls();
+    renderPaymentFields();
+  }
+
+  function renderProducts() {
+    productsListEl.innerHTML = '';
+    for (const p of products) {
+      const div = document.createElement('div');
+      div.className = 'product';
+      div.innerHTML = `
+        <div>
+          <div style="font-weight:600">${p.name}</div>
+          <div class="small">Price: ₹<span id="price-${p.id}">${p.price}</span></div>
+          <div class="small">Subscribers: <span id="subcount-${p.id}">${p.observers.size}</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <div class="flex">
+            <button class="btn-ghost" data-action="subscribe" data-id="${p.id}">Subscribe</button>
+            <button class="btn-ghost" data-action="unsubscribe" data-id="${p.id}">Unsubscribe</button>
+          </div>
+          <div class="flex">
+            <button class="btn-primary" data-action="add" data-id="${p.id}">Add</button>
+            <button style="background:#ffa500;color:white;border-radius:8px;padding:7px 10px" data-action="lower" data-id="${p.id}">Lower price</button>
+          </div>
+        </div>
+      `;
+      productsListEl.appendChild(div);
+    }
+  }
+
+  function bindControls() {
+    // product list click handler (subscribe, unsubscribe, add, lower)
+    productsListEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const pid = btn.dataset.id;
+      const product = productMap.get(pid);
+      if (!product) return;
+
+      if (action === 'subscribe') {
+        if (!currentCustomer) { addNotification('Set a customer name first.'); return; }
+        product.addObserver(currentCustomer);
+        addNotification(${currentCustomer.name} subscribed to "${product.name}" price alerts);
+        updateProductCounts(pid);
+      } else if (action === 'unsubscribe') {
+        if (!currentCustomer) { addNotification('Set a customer name first.'); return; }
+        product.removeObserver(currentCustomer);
+        addNotification(${currentCustomer.name} unsubscribed from "${product.name}" price alerts);
+        updateProductCounts(pid);
+      } else if (action === 'add') {
+        // default qty 1
+        const cmd = new AddItemCommand(cart, product, 1);
+        manager.execute(cmd);
+      } else if (action === 'lower') {
+        // lower price by 10% for demo
+        const old = product.price;
+        const newPrice = Math.max(1, Math.round(old * 0.9));
+        product.setPrice(newPrice);
+        document.getElementById(price-${pid}).textContent = newPrice;
+        addNotification(Admin: "${product.name}" price changed from ₹${old} → ₹${newPrice});
+        updateProductCounts(pid);
+        renderCart(); // price change affects totals
+      }
+    });
+
+    // Add / Remove buttons
+    document.getElementById('addBtn').addEventListener('click', () => {
+      const pid = productSelect.value;
+      const product = productMap.get(pid);
+      const qty = Math.max(1, parseInt(qtyInput.value) || 1);
+      manager.execute(new AddItemCommand(cart, product, qty));
+    });
+    document.getElementById('removeBtn').addEventListener('click', () => {
+      const pid = productSelect.value;
+      const product = productMap.get(pid);
+      manager.execute(new RemoveItemCommand(cart, product, 1));
+    });
+
+    // coupon
+    document.getElementById('applyCouponBtn').addEventListener('click', () => {
+      const amount = Math.max(0, parseFloat(document.getElementById('couponInput').value) || 0);
+      manager.execute(new ApplyCouponCommand(cart, amount));
+    });
+
+    // undo/redo/clear
+    document.getElementById('undoBtn').addEventListener('click', () => manager.undo());
+    document.getElementById('redoBtn').addEventListener('click', () => manager.redo());
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      manager.execute(new ClearCartCommand(cart));
+    });
+
+    // customer creation
+    document.getElementById('createCustomerBtn').addEventListener('click', () => {
+      const nm = document.getElementById('customerName').value.trim() || 'Guest';
+      currentCustomer = new Customer('c-' + Date.now(), nm);
+      addNotification(Current customer set: ${nm});
+    });
+
+    // checkout
+    document.getElementById('paymentMethod').addEventListener('change', renderPaymentFields);
+    document.getElementById('checkoutBtn').addEventListener('click', () => {
+      const amount = cart.total();
+      if (amount <= 0) { addNotification('Cart is empty or total is ₹0'); return; }
+
+      const method = document.getElementById('paymentMethod').value;
+      let strategy;
+      let details = {};
+
+      if (method === 'card') {
+        strategy = new CardPayment();
+        details.cardNumber = document.getElementById('cardNumber')?.value?.trim();
+        details.holder = document.getElementById('cardHolder')?.value?.trim();
+      } else if (method === 'upi') {
+        strategy = new UpiPayment();
+        details.vpa = document.getElementById('vpa')?.value?.trim();
+      } else { // wallet
+        strategy = wallet;
+        // no extra details in this demo
+      }
+      const ok = strategy.pay(amount, details);
+      if (ok) {
+        addNotification('Order placed successfully. Clearing cart.');
+        manager.execute(new ClearCartCommand(cart));
+      } else {
+        addNotification('Payment failed. Order not placed.');
+      }
+    });
+
+    // simulate price drop button: randomly lower one product price
+    document.getElementById('simulatePriceDrop').addEventListener('click', () => {
+      const arr = Array.from(productMap.values());
+      const pick = arr[Math.floor(Math.random() * arr.length)];
+      const old = pick.price;
+      const newP = Math.max(1, Math.round(old * (0.6 + Math.random()*0.3))); // lower 10-40%
+      pick.setPrice(newP);
+      document.getElementById(price-${pick.id}).textContent = newP;
+      addNotification(Admin: "${pick.name}" price changed from ₹${old} → ₹${newP});
+      updateProductCounts(pick.id);
+      renderCart();
+    });
+  }
+
+  function updateProductCounts(pid) {
+    const p = productMap.get(pid);
+    document.getElementById(subcount-${pid}).textContent = p.observers.size;
+  }
+
+  function renderCart() {
+    cartItemsEl.innerHTML = '';
+    if (cart.items.size === 0) {
+      cartItemsEl.innerHTML = '<div class="muted">Cart is empty</div>';
+    } else {
+      for (const {product, qty} of cart.items.values()) {
+        const div = document.createElement('div');
+        div.className = 'line';
+        div.innerHTML = <div>${product.name} x${qty}</div><div>₹${(product.price*qty).toFixed(2)}</div>;
+        cartItemsEl.appendChild(div);
+      }
+    }
+    couponBadge.textContent = cart.coupon ? ₹${cart.coupon} : 'None';
+    subtotalEl.textContent = ₹${cart.subtotal().toFixed(2)};
+    totalEl.textContent = ₹${cart.total().toFixed(2)};
+    // also update product select labels for new prices
+    for (const opt of productSelect.options) {
+      const p = productMap.get(opt.value);
+      opt.textContent = ${p.name} (₹${p.price});
+      const priceEl = document.getElementById(price-${p.id});
+      if (priceEl) priceEl.textContent = p.price;
+    }
+  }
+
+  function addNotification(msg) {
+    const d = document.createElement('div');
+    const t = new Date().toLocaleTimeString();
+    d.textContent = [${t}] ${msg};
+    notificationsEl.prepend(d);
+  }
+
+  // exposes for Customer to call
+  return {
+    init,
+    addNotification,
+    renderCart
+  };
+})();
+
+UI.init();
+</script>
+</body>
+</html>
